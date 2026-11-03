@@ -1,5 +1,6 @@
+import json
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 import pytest
 from pydantic import BaseModel, Field
@@ -571,6 +572,131 @@ def test_convert_pydantic_with_nullable_str_enum():
     }
 
     assert tool_spec == expected_spec
+
+
+def test_convert_pydantic_with_union_of_scalar_types():
+    """Test that every alternative of a union field is kept, and null is added only when the union includes None."""
+
+    class Mixed(BaseModel):
+        value: int | str
+        maybe: int | str | None = None
+
+    tru_tool_spec = convert_pydantic_to_tool_spec(Mixed)
+
+    exp_tool_spec = {
+        "name": "Mixed",
+        "description": "Mixed structured output tool",
+        "inputSchema": {
+            "json": {
+                "type": "object",
+                "properties": {
+                    "value": {
+                        "anyOf": [{"type": "integer"}, {"type": "string"}],
+                        "title": "Value",
+                    },
+                    "maybe": {
+                        "anyOf": [{"type": "integer"}, {"type": "string"}, {"type": "null"}],
+                        "default": None,
+                        "title": "Maybe",
+                    },
+                },
+                "title": "Mixed",
+                "required": ["value"],
+            }
+        },
+    }
+
+    assert tru_tool_spec == exp_tool_spec
+
+
+def test_convert_pydantic_with_union_of_models():
+    """Test that a union of models keeps each model's expanded schema instead of dropping the field's type."""
+
+    class Search(BaseModel):
+        """Search action."""
+
+        query: str
+
+    class Answer(BaseModel):
+        """Answer action."""
+
+        text: str
+
+    class Step(BaseModel):
+        action: Search | Answer
+        fallback: Search | Answer | None = None
+
+    exp_search_schema = {
+        "description": "Search action.",
+        "title": "Search",
+        "type": "object",
+        "properties": {"query": {"title": "Query", "type": "string"}},
+        "required": ["query"],
+    }
+    exp_answer_schema = {
+        "description": "Answer action.",
+        "title": "Answer",
+        "type": "object",
+        "properties": {"text": {"title": "Text", "type": "string"}},
+        "required": ["text"],
+    }
+
+    tru_tool_spec = convert_pydantic_to_tool_spec(Step)
+
+    exp_tool_spec = {
+        "name": "Step",
+        "description": "Step structured output tool",
+        "inputSchema": {
+            "json": {
+                "type": "object",
+                "properties": {
+                    "action": {"anyOf": [exp_search_schema, exp_answer_schema], "title": "Action"},
+                    "fallback": {
+                        "anyOf": [exp_search_schema, exp_answer_schema, {"type": "null"}],
+                        "default": None,
+                        "title": "Fallback",
+                    },
+                },
+                "title": "Step",
+                "required": ["action"],
+            }
+        },
+    }
+
+    assert tru_tool_spec == exp_tool_spec
+
+
+def test_convert_pydantic_with_discriminated_union_resolves_refs():
+    """Test that a discriminated union field has no unresolved $ref, since the $defs are not part of the tool spec."""
+
+    class Cat(BaseModel):
+        kind: Literal["cat"]
+
+    class Dog(BaseModel):
+        kind: Literal["dog"]
+
+    class Owner(BaseModel):
+        pet: Annotated[Cat | Dog, Field(discriminator="kind")]
+
+    tru_tool_spec = convert_pydantic_to_tool_spec(Owner)
+
+    tru_pet_schema = tru_tool_spec["inputSchema"]["json"]["properties"]["pet"]
+    exp_pet_alternatives = [
+        {
+            "title": "Cat",
+            "type": "object",
+            "properties": {"kind": {"const": "cat", "title": "Kind", "type": "string"}},
+            "required": ["kind"],
+        },
+        {
+            "title": "Dog",
+            "type": "object",
+            "properties": {"kind": {"const": "dog", "title": "Kind", "type": "string"}},
+            "required": ["kind"],
+        },
+    ]
+    assert tru_pet_schema["oneOf"] == exp_pet_alternatives
+    assert "$ref" not in json.dumps(tru_tool_spec)
 
 
 def test_convert_pydantic_with_non_nullable_literal_default():

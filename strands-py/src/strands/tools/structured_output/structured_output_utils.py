@@ -79,6 +79,39 @@ def _flatten_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return flattened
 
 
+def _find_union_keyword(prop: dict[str, Any]) -> str | None:
+    """Find the keyword under which a property lists more than one non-null alternative.
+
+    Args:
+        prop: The property to inspect
+
+    Returns:
+        "anyOf" or "oneOf" when the property is a union of several types, otherwise None
+    """
+    for keyword in ("anyOf", "oneOf"):
+        alternatives = [option for option in prop.get(keyword, []) if option.get("type") != "null"]
+        if len(alternatives) > 1:
+            return keyword
+    return None
+
+
+def _process_union(prop: dict[str, Any], keyword: str, defs: dict[str, Any], fully_expand: bool) -> dict[str, Any]:
+    """Process a union property, resolving the references in each alternative and keeping all of them.
+
+    Args:
+        prop: The union property to process
+        keyword: The keyword that lists the alternatives ("anyOf" or "oneOf")
+        defs: The definitions dictionary for resolving references
+        fully_expand: Whether to fully expand nested properties
+
+    Returns:
+        The property with every alternative processed and the rest of its keywords unchanged
+    """
+    result = {key: value for key, value in prop.items() if key != keyword}
+    result[keyword] = [_process_property(option, defs, True, fully_expand) for option in prop[keyword]]
+    return result
+
+
 def _process_property(
     prop: dict[str, Any],
     defs: dict[str, Any],
@@ -96,6 +129,10 @@ def _process_property(
     Returns:
         Processed property
     """
+    union_keyword = _find_union_keyword(prop)
+    if union_keyword:
+        return _process_union(prop, union_keyword, defs, fully_expand)
+
     result = {}
     is_nullable = False
 
