@@ -108,7 +108,9 @@ def _process_union(prop: dict[str, Any], keyword: str, defs: dict[str, Any], ful
         The property with every alternative processed and the rest of its keywords unchanged
     """
     result = {key: value for key, value in prop.items() if key != keyword}
-    result[keyword] = [_process_property(option, defs, True, fully_expand) for option in prop[keyword]]
+    result[keyword] = [
+        _process_property(option, defs, is_required=True, fully_expand=fully_expand) for option in prop[keyword]
+    ]
     return result
 
 

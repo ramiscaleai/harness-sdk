@@ -680,8 +680,8 @@ def test_convert_pydantic_with_discriminated_union_resolves_refs():
 
     tru_tool_spec = convert_pydantic_to_tool_spec(Owner)
 
-    tru_pet_schema = tru_tool_spec["inputSchema"]["json"]["properties"]["pet"]
-    exp_pet_alternatives = [
+    tru_alternatives = tru_tool_spec["inputSchema"]["json"]["properties"]["pet"]["oneOf"]
+    exp_alternatives = [
         {
             "title": "Cat",
             "type": "object",
@@ -695,7 +695,7 @@ def test_convert_pydantic_with_discriminated_union_resolves_refs():
             "required": ["kind"],
         },
     ]
-    assert tru_pet_schema["oneOf"] == exp_pet_alternatives
+    assert tru_alternatives == exp_alternatives
     assert "$ref" not in json.dumps(tru_tool_spec)
 
 
