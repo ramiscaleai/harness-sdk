@@ -610,7 +610,7 @@ def test_convert_pydantic_with_union_of_scalar_types():
 
 
 def test_convert_pydantic_with_union_of_models():
-    """Test that a union of models keeps each model's expanded schema instead of dropping the field's type."""
+    """Test that a union of models keeps each model's expanded schema, also as the items of an optional list."""
 
     class Search(BaseModel):
         """Search action."""
@@ -625,6 +625,7 @@ def test_convert_pydantic_with_union_of_models():
     class Step(BaseModel):
         action: Search | Answer
         fallback: Search | Answer | None = None
+        history: list[Search | Answer] | None = None
 
     exp_search_schema = {
         "description": "Search action.",
@@ -656,6 +657,7 @@ def test_convert_pydantic_with_union_of_models():
                         "default": None,
                         "title": "Fallback",
                     },
+                    "history": {"items": {"anyOf": [exp_search_schema, exp_answer_schema]}, "type": ["array", "null"]},
                 },
                 "title": "Step",
                 "required": ["action"],
